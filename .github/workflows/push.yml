@@ -1,0 +1,44 @@
+name: Push NuGet package
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pack
+        run: dotnet pack src/SampleTool /p:PackageVersion=1.0.${{ github.run_number }} --output src/SampleTool/bin
+        
+      - name: Token login
+        uses: joelverhagen/token-login@v1
+        id: token-login
+        with:
+          username: jver
+          package-source: https://jver-oidc.azurewebsites.net/api/v2/package
+  
+      - name: Push
+        run: dotnet nuget push src/SampleTool/bin/*.nupkg -s https://jver-oidc.azurewebsites.net/api/v2/package
+        env:
+          NUGET_TOKEN_INFO: ${{ steps.token-login.outputs.token-info }}
+          NUGET_TOKEN_LOG_FILE: NuGet.TokenCredentialProvider.log
+
+      - name: Show credential provider log
+        run: cat NuGet.TokenCredentialProvider.log
+        if: success() || failure()
+
+      - name: Install tool
+        run: dotnet tool install --global SampleTool --add-source https://jver-oidc.azurewebsites.net/api/v2
+      
+      - name: Run tool
+        run: sample-tool
